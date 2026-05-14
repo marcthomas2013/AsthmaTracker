@@ -1,10 +1,3 @@
-//
-//  Asthma_TrackerApp.swift
-//  Asthma Tracker
-//
-//  Created by Marc Thomas on 14/05/2026.
-//
-
 import SwiftUI
 import SwiftData
 
@@ -12,9 +5,15 @@ import SwiftData
 struct Asthma_TrackerApp: App {
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
-            Item.self,
+            InhalerEvent.self,
+            InhalerReasonOption.self,
         ])
-        let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
+        let modelConfiguration = ModelConfiguration(
+            "AsthmaTrackerV2",
+            schema: schema,
+            isStoredInMemoryOnly: false,
+            cloudKitDatabase: .automatic
+        )
 
         do {
             return try ModelContainer(for: schema, configurations: [modelConfiguration])
