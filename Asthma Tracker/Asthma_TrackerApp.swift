@@ -7,6 +7,7 @@ struct Asthma_TrackerApp: App {
         let schema = Schema([
             InhalerEvent.self,
             InhalerReasonOption.self,
+            TrackedInhaler.self,
         ])
         let modelConfiguration = ModelConfiguration(
             "AsthmaTrackerV2",

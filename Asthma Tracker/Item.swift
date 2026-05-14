@@ -40,6 +40,19 @@ final class InhalerReasonOption {
     }
 }
 
+@Model
+final class TrackedInhaler {
+    var inhalerTypeRaw: String = InhalerType.preventative.rawValue
+    var createdAt: Date = Date.now
+    var defaultReasonsSeeded: Bool = false
+
+    init(inhalerType: InhalerType, createdAt: Date = Date.now, defaultReasonsSeeded: Bool = false) {
+        self.inhalerTypeRaw = inhalerType.rawValue
+        self.createdAt = createdAt
+        self.defaultReasonsSeeded = defaultReasonsSeeded
+    }
+}
+
 enum InhalerType: String, Codable, CaseIterable, Identifiable {
     case preventative = "Preventative"
     case reliever = "Reliever"

@@ -9,6 +9,7 @@ struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.scenePhase) private var scenePhase
     @Query(sort: \InhalerEvent.takenAt, order: .reverse) private var events: [InhalerEvent]
+    @Query(sort: \TrackedInhaler.createdAt, order: .forward) private var trackedInhalers: [TrackedInhaler]
     @Query(
         sort: [
             SortDescriptor(\InhalerReasonOption.inhalerTypeRaw, order: .forward),
@@ -17,12 +18,13 @@ struct ContentView: View {
     ) private var reasonOptions: [InhalerReasonOption]
     @StateObject private var viewModel = AsthmaDashboardViewModel()
     @State private var notes = ""
-    @State private var selectedInhalerType: InhalerType = .preventative
+    @State private var selectedInhalerType: InhalerType?
     @State private var selectedReason = ""
     @State private var selectedDate = Date()
     @State private var selectedPuffCount = 1
     @State private var customReasonInputs: [String: String] = [:]
     @State private var logMessage: String?
+    @State private var showAddInhalerSheet = false
     @FocusState private var focusedField: FocusedField?
 
     var body: some View {
@@ -48,11 +50,17 @@ struct ContentView: View {
                 }
         }
         .task {
+            setInitialTrackedInhalerIfNeeded()
             ensureDefaultReasons()
             setInitialReasonIfNeeded()
             await viewModel.autoConnectAndSync()
         }
-        .onChange(of: selectedInhalerType) { _, _ in
+        .onChange(of: trackedInhalers.count) { _, _ in
+            setInitialTrackedInhalerIfNeeded()
+            ensureDefaultReasons()
+            setInitialReasonIfNeeded()
+        }
+        .onChange(of: selectedInhalerType?.rawValue) { _, _ in
             setInitialReasonIfNeeded()
         }
         .onChange(of: reasonOptions.count) { _, _ in
@@ -66,6 +74,12 @@ struct ContentView: View {
                 }
             default:
                 break
+            }
+        }
+        .sheet(isPresented: $showAddInhalerSheet) {
+            AddTrackedInhalerView { type, configuredReasons in
+                addTrackedInhaler(type: type, configuredReasons: configuredReasons)
+                showAddInhalerSheet = false
             }
         }
     }
@@ -142,47 +156,63 @@ struct ContentView: View {
     private var logInhalerTab: some View {
         NavigationStack {
             Form {
-                Section("Dose Details") {
-                    Picker("Inhaler", selection: $selectedInhalerType) {
-                        ForEach(InhalerType.allCases) { type in
-                            Label(type.rawValue, systemImage: type.symbolName).tag(type)
+                if trackedInhalerTypes.isEmpty {
+                    Section("Set Up Inhalers") {
+                        Text("Add at least one inhaler to start logging doses.")
+                            .foregroundStyle(.secondary)
+                        Button("Add Inhaler to Track") {
+                            showAddInhalerSheet = true
                         }
                     }
-                    .pickerStyle(.segmented)
+                } else {
+                    Section("Dose Details") {
+                        Text("Inhaler")
+                        inhalerButtons
 
-                    Picker("Reason Taken", selection: $selectedReason) {
-                        ForEach(reasons(for: selectedInhalerType)) { option in
-                            Text(option.reason).tag(option.reason)
+                        if let selectedType = selectedInhalerType {
+                            Picker("Reason Taken", selection: $selectedReason) {
+                                ForEach(reasons(for: selectedType)) { option in
+                                    Text(option.reason).tag(option.reason)
+                                }
+                            }
+                            .pickerStyle(.menu)
+                        }
+                        DatePicker("Taken At", selection: $selectedDate)
+                        Stepper("Puffs: \(selectedPuffCount)", value: $selectedPuffCount, in: 1...20)
+                        TextField("Notes (optional)", text: $notes, axis: .vertical)
+                            .focused($focusedField, equals: .notes)
+                    }
+
+                    Section {
+                        Button("Log Dose") {
+                            logDose()
                         }
                     }
-                    .pickerStyle(.menu)
-                    DatePicker("Taken At", selection: $selectedDate)
-                    Stepper("Puffs: \(selectedPuffCount)", value: $selectedPuffCount, in: 1...20)
-                    TextField("Notes (optional)", text: $notes, axis: .vertical)
-                        .focused($focusedField, equals: .notes)
-                }
 
-                Section {
-                    Button("Log Dose") {
-                        logDose()
-                    }
-                }
-
-                if let logMessage {
-                    Section("Result") {
-                        Text(logMessage)
+                    if let logMessage {
+                        Section("Result") {
+                            Text(logMessage)
+                        }
                     }
                 }
             }
             .scrollDismissesKeyboard(.immediately)
-            .onTapGesture {
+            .simultaneousGesture(TapGesture().onEnded {
                 focusedField = nil
-            }
+            })
             .toolbar {
                 ToolbarItemGroup(placement: .keyboard) {
                     Spacer()
                     Button("Done") {
                         focusedField = nil
+                    }
+                }
+
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button {
+                        showAddInhalerSheet = true
+                    } label: {
+                        Label("Add Inhaler", systemImage: "plus")
                     }
                 }
             }
@@ -268,22 +298,12 @@ struct ContentView: View {
                             .foregroundStyle(.red)
                     }
                 }
-
-                ForEach(InhalerType.allCases) { type in
-                    Section("\(type.rawValue) Reasons") {
-                        if reasons(for: type).isEmpty {
-                            Text("No reasons configured yet.")
-                                .foregroundStyle(.secondary)
-                        } else {
-                            ForEach(reasons(for: type)) { option in
-                                Text(option.reason)
-                            }
-                        }
-
-                        TextField("Add reason", text: customReasonBinding(for: type))
-                        Button("Add Reason") {
-                            addReason(for: type)
-                        }
+                Section("Inhalers") {
+                    NavigationLink("Manage Inhalers") {
+                        manageInhalersView
+                    }
+                    Button("Add Inhaler to Track") {
+                        showAddInhalerSheet = true
                     }
                 }
             }
@@ -291,9 +311,71 @@ struct ContentView: View {
         }
     }
 
+    private var inhalerButtons: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(trackedInhalerTypes) { type in
+                    Button {
+                        selectedInhalerType = type
+                    } label: {
+                        Label(type.rawValue, systemImage: type.symbolName)
+                            .font(.subheadline)
+                            .padding(.vertical, 8)
+                            .padding(.horizontal, 12)
+                            .background(
+                                Capsule()
+                                    .fill(selectedInhalerType == type ? Color.accentColor.opacity(0.2) : Color.secondary.opacity(0.15))
+                            )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+    }
+
+    private var manageInhalersView: some View {
+        Form {
+            if trackedInhalerTypes.isEmpty {
+                ContentUnavailableView("No inhalers added", systemImage: "pills")
+            }
+
+            ForEach(trackedInhalerTypes) { type in
+                Section(type.rawValue) {
+                    if reasons(for: type).isEmpty {
+                        Text("No reasons configured yet.")
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ForEach(reasons(for: type)) { option in
+                            TextField("Reason", text: reasonBinding(for: option))
+                        }
+                        .onDelete { offsets in
+                            deleteReasons(for: type, offsets: offsets)
+                        }
+                    }
+
+                    TextField("Add reason", text: customReasonBinding(for: type))
+                    Button("Add Reason") {
+                        addReason(for: type)
+                    }
+
+                    Button(role: .destructive) {
+                        removeTrackedInhaler(type)
+                    } label: {
+                        Text("Remove Inhaler")
+                    }
+                }
+            }
+        }
+        .navigationTitle("Manage Inhalers")
+    }
+
     private func logDose() {
+        guard let selectedType = selectedInhalerType else {
+            logMessage = "Please add and select an inhaler first."
+            return
+        }
         let loggedDate = selectedDate
-        let loggedInhalerType = selectedInhalerType
+        let loggedInhalerType = selectedType
         let loggedReason = selectedReason.isEmpty ? "Unspecified" : selectedReason
         let loggedPuffCount = selectedPuffCount
         let loggedNotes = notes
@@ -329,6 +411,18 @@ struct ContentView: View {
         focusedField = nil
     }
 
+    private var trackedInhalerTypes: [InhalerType] {
+        trackedInhalers.compactMap { InhalerType(rawValue: $0.inhalerTypeRaw) }
+    }
+
+    private func setInitialTrackedInhalerIfNeeded() {
+        let availableTypes = trackedInhalerTypes
+        if let current = selectedInhalerType, availableTypes.contains(current) {
+            return
+        }
+        selectedInhalerType = availableTypes.first
+    }
+
     private func reasons(for type: InhalerType) -> [InhalerReasonOption] {
         reasonOptions.filter { $0.inhalerTypeRaw == type.rawValue }
     }
@@ -338,6 +432,14 @@ struct ContentView: View {
             customReasonInputs[type.rawValue] ?? ""
         } set: { value in
             customReasonInputs[type.rawValue] = value
+        }
+    }
+
+    private func reasonBinding(for option: InhalerReasonOption) -> Binding<String> {
+        Binding {
+            option.reason
+        } set: { value in
+            option.reason = value
         }
     }
 
@@ -359,24 +461,67 @@ struct ContentView: View {
     }
 
     private func ensureDefaultReasons() {
-        for type in InhalerType.allCases {
-            let existingReasons = Set(
-                reasons(for: type).map { $0.reason.lowercased() }
-            )
-
-            for defaultReason in type.defaultReasons where !existingReasons.contains(defaultReason.lowercased()) {
-                modelContext.insert(InhalerReasonOption(inhalerType: type, reason: defaultReason))
+        for tracked in trackedInhalers {
+            guard let type = InhalerType(rawValue: tracked.inhalerTypeRaw) else { continue }
+            if reasons(for: type).isEmpty {
+                for defaultReason in type.defaultReasons {
+                    modelContext.insert(InhalerReasonOption(inhalerType: type, reason: defaultReason))
+                }
             }
         }
     }
 
     private func setInitialReasonIfNeeded() {
-        let availableReasons = reasons(for: selectedInhalerType).map(\.reason)
+        guard let selectedType = selectedInhalerType else {
+            selectedReason = ""
+            return
+        }
+
+        let availableReasons = reasons(for: selectedType).map(\.reason)
         if let first = availableReasons.first, !availableReasons.contains(selectedReason) {
             selectedReason = first
         } else if availableReasons.isEmpty {
             selectedReason = ""
         }
+    }
+
+    private func addTrackedInhaler(type: InhalerType, configuredReasons: [String]) {
+        let alreadyTracked = trackedInhalerTypes.contains(type)
+        if !alreadyTracked {
+            modelContext.insert(TrackedInhaler(inhalerType: type))
+        }
+
+        let existingReasons = Set(reasons(for: type).map { $0.reason.lowercased() })
+        let allReasons = configuredReasons.isEmpty ? type.defaultReasons : configuredReasons
+        for reason in allReasons {
+            let trimmed = reason.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { continue }
+            if !existingReasons.contains(trimmed.lowercased()) {
+                modelContext.insert(InhalerReasonOption(inhalerType: type, reason: trimmed))
+            }
+        }
+
+        setInitialTrackedInhalerIfNeeded()
+        setInitialReasonIfNeeded()
+    }
+
+    private func removeTrackedInhaler(_ type: InhalerType) {
+        for inhaler in trackedInhalers where inhaler.inhalerTypeRaw == type.rawValue {
+            modelContext.delete(inhaler)
+        }
+        if selectedInhalerType == type {
+            selectedInhalerType = trackedInhalerTypes.first(where: { $0 != type })
+        }
+        setInitialReasonIfNeeded()
+    }
+
+    private func deleteReasons(for type: InhalerType, offsets: IndexSet) {
+        let typeReasons = reasons(for: type)
+        for index in offsets {
+            guard typeReasons.indices.contains(index) else { continue }
+            modelContext.delete(typeReasons[index])
+        }
+        setInitialReasonIfNeeded()
     }
 
     private func deleteItems(offsets: IndexSet) {
@@ -390,5 +535,101 @@ struct ContentView: View {
 
 #Preview {
     ContentView()
-        .modelContainer(for: [InhalerEvent.self, InhalerReasonOption.self], inMemory: true)
+        .modelContainer(for: [InhalerEvent.self, InhalerReasonOption.self, TrackedInhaler.self], inMemory: true)
+}
+
+private struct AddTrackedInhalerView: View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var selectedType: InhalerType = .preventative
+    @State private var reasonDraft = ""
+    @State private var configuredReasons: [String] = InhalerType.preventative.defaultReasons
+
+    let onAdd: (InhalerType, [String]) -> Void
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Inhaler Type") {
+                    Picker("Type", selection: $selectedType) {
+                        ForEach(InhalerType.allCases) { type in
+                            Label(type.rawValue, systemImage: type.symbolName).tag(type)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                }
+
+                Section("Reasons for This Inhaler") {
+                    HStack {
+                        TextField("Add reason", text: $reasonDraft)
+                        Button("Add") {
+                            addReasonDraft()
+                        }
+                    }
+
+                    if configuredReasons.isEmpty {
+                        Text("No reasons yet. Add at least one.")
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ForEach(Array(configuredReasons.indices), id: \.self) { index in
+                            TextField(
+                                "Reason",
+                                text: Binding(
+                                    get: { configuredReasons[index] },
+                                    set: { configuredReasons[index] = $0 }
+                                )
+                            )
+                        }
+                        .onDelete(perform: deleteConfiguredReasons)
+                    }
+                }
+            }
+            .navigationTitle("Add Inhaler")
+            .onChange(of: selectedType) { _, newType in
+                configuredReasons = newType.defaultReasons
+            }
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Add Inhaler") {
+                        onAdd(selectedType, cleanedConfiguredReasons())
+                    }
+                }
+            }
+        }
+    }
+
+    private func addReasonDraft() {
+        let trimmed = reasonDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        guard !configuredReasons.contains(where: { $0.caseInsensitiveCompare(trimmed) == .orderedSame }) else {
+            reasonDraft = ""
+            return
+        }
+        configuredReasons.append(trimmed)
+        reasonDraft = ""
+    }
+
+    private func deleteConfiguredReasons(offsets: IndexSet) {
+        configuredReasons.remove(atOffsets: offsets)
+    }
+
+    private func cleanedConfiguredReasons() -> [String] {
+        var seen = Set<String>()
+        var cleaned: [String] = []
+
+        for reason in configuredReasons {
+            let trimmed = reason.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { continue }
+            let key = trimmed.lowercased()
+            guard !seen.contains(key) else { continue }
+            seen.insert(key)
+            cleaned.append(trimmed)
+        }
+
+        return cleaned
+    }
 }
