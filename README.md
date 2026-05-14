@@ -89,6 +89,13 @@ When a dose is logged, the selected date/time and puff count are written to Heal
    - iCloud capability is enabled with CloudKit.
 3. Configure an iCloud container (required for cross-device CloudKit sync).
 4. Run on a real device for full HealthKit behavior.
+5. For ads + ad removal monetization:
+   - Add the `Google-Mobile-Ads-SDK` Swift Package to the app target.
+   - In `Asthma Tracker/Info.plist`, set:
+     - `GADApplicationIdentifier` to your AdMob App ID.
+     - `AdMobBannerUnitID` to your banner ad unit ID.
+     - `AdRemovalMonthlyProductID` to your App Store Connect monthly subscription product ID.
+   - Create the monthly subscription in App Store Connect with the same product ID.
 
 ## Limitations / Notes
 

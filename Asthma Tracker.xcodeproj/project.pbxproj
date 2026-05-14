@@ -6,6 +6,10 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		D9B700332FC010BE00A1B001 /* GoogleMobileAds in Frameworks */ = {isa = PBXBuildFile; productRef = D9B700322FC010BE00A1B001 /* GoogleMobileAds */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		D78405A42FB599B100A8E618 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -65,6 +69,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				D9B700332FC010BE00A1B001 /* GoogleMobileAds in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -125,6 +130,7 @@
 			);
 			name = "Asthma Tracker";
 			packageProductDependencies = (
+				D9B700322FC010BE00A1B001 /* GoogleMobileAds */,
 			);
 			productName = "Asthma Tracker";
 			productReference = D78405922FB599AF00A8E618 /* Asthma Tracker.app */;
@@ -208,6 +214,9 @@
 			);
 			mainGroup = D78405892FB599AF00A8E618;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				D9B700312FC010BE00A1B001 /* XCRemoteSwiftPackageReference "swift-package-manager-google-mobile-ads" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = D78405932FB599AF00A8E618 /* Products */;
 			projectDirPath = "";
@@ -280,6 +289,25 @@
 			targetProxy = D78405AE2FB599B100A8E618 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		D9B700312FC010BE00A1B001 /* XCRemoteSwiftPackageReference "swift-package-manager-google-mobile-ads" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/googleads/swift-package-manager-google-mobile-ads";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 12.0.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		D9B700322FC010BE00A1B001 /* GoogleMobileAds */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D9B700312FC010BE00A1B001 /* XCRemoteSwiftPackageReference "swift-package-manager-google-mobile-ads" */;
+			productName = GoogleMobileAds;
+		};
+/* End XCSwiftPackageProductDependency section */
 
 /* Begin XCBuildConfiguration section */
 		D78405B72FB599B100A8E618 /* Debug */ = {

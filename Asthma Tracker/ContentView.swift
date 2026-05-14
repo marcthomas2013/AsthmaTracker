@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import StoreKit
 
 struct ContentView: View {
     private enum FocusedField {
@@ -25,6 +26,7 @@ struct ContentView: View {
     @State private var customReasonInputs: [String: String] = [:]
     @State private var logMessage: String?
     @State private var showAddInhalerSheet = false
+    @StateObject private var monetizationManager = MonetizationManager()
     @FocusState private var focusedField: FocusedField?
 
     var body: some View {
@@ -49,11 +51,19 @@ struct ContentView: View {
                     Label("Settings", systemImage: "gearshape")
                 }
         }
+        .overlay(alignment: .bottom) {
+            if !monetizationManager.isAdRemovalActive {
+                BottomBannerAdView(adUnitID: MonetizationConfig.adMobBannerUnitID)
+                    .padding(.horizontal, 8)
+                    .padding(.bottom, 58) // Keep banner clearly above the tab bar.
+            }
+        }
         .task {
             setInitialTrackedInhalerIfNeeded()
             ensureDefaultReasons()
             setInitialReasonIfNeeded()
             await viewModel.autoConnectAndSync()
+            await monetizationManager.refreshProductsAndEntitlements()
         }
         .onChange(of: trackedInhalers.count) { _, _ in
             setInitialTrackedInhalerIfNeeded()
@@ -304,6 +314,42 @@ struct ContentView: View {
                     }
                     Button("Add Inhaler to Track") {
                         showAddInhalerSheet = true
+                    }
+                }
+
+                Section("Ad Removal") {
+                    if monetizationManager.isAdRemovalActive {
+                        Label("Ad removal is active", systemImage: "checkmark.circle.fill")
+                            .foregroundStyle(.green)
+                    } else {
+                        Text("Subscribe monthly to remove banner ads.")
+                            .foregroundStyle(.secondary)
+                    }
+
+                    if let product = monetizationManager.monthlyProduct {
+                        Button("Remove Ads Monthly (\(product.displayPrice))") {
+                            Task {
+                                await monetizationManager.purchaseMonthlyAdRemoval()
+                            }
+                        }
+                        .disabled(monetizationManager.isPurchasing || monetizationManager.isAdRemovalActive)
+                    } else {
+                        Text("Monthly plan is not configured yet.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Button("Restore Purchases") {
+                        Task {
+                            await monetizationManager.restorePurchases()
+                        }
+                    }
+                    .disabled(monetizationManager.isPurchasing)
+
+                    if let status = monetizationManager.purchaseStatusMessage {
+                        Text(status)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
                 }
             }

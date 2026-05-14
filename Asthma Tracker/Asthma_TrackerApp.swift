@@ -1,6 +1,10 @@
 import SwiftUI
 import SwiftData
 
+#if canImport(GoogleMobileAds)
+import GoogleMobileAds
+#endif
+
 @main
 struct Asthma_TrackerApp: App {
     var sharedModelContainer: ModelContainer = {
@@ -23,10 +27,23 @@ struct Asthma_TrackerApp: App {
         }
     }()
 
+    init() {
+        configureAdsIfAvailable()
+    }
+
     var body: some Scene {
         WindowGroup {
             ContentView()
         }
         .modelContainer(sharedModelContainer)
+    }
+
+    private func configureAdsIfAvailable() {
+        #if canImport(GoogleMobileAds)
+        guard !MonetizationConfig.adMobAppID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return
+        }
+        MobileAds.shared.start(completionHandler: nil)
+        #endif
     }
 }
